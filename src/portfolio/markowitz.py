@@ -395,11 +395,13 @@ def _run_portfolio_optimization(
         ]
 
         res = minimize(
-            fun=lambda w, last_optimal_weights: _optimize_portfolio_objective(
-                w,
-                last_optimal_weights,
-                l1_coeff,
-                cov_matrix,
+            fun=lambda w, last_optimal_weights=last_optimal_weights: (
+                _optimize_portfolio_objective(
+                    w,
+                    last_optimal_weights,
+                    l1_coeff,
+                    cov_matrix,
+                )
             ),
             x0=last_optimal_weights,
             method="SLSQP",

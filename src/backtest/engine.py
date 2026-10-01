@@ -387,7 +387,7 @@ def perform_backtesting(
                 close.iloc[p].values - close.iloc[p - 1].values
             ) / close.iloc[p - 1].values  # type: ignore
 
-            port_daily_asset = _calculate_daily_asset_returns(
+            eq_port_daily_asset = _calculate_daily_asset_returns(
                 equal_daily_asset_returns,
                 equal_w_drift,
                 eq_turnover_cost,
@@ -395,7 +395,7 @@ def perform_backtesting(
                 equal_portfolio_value,
             )
             (equal_port_ret, equal_portfolio_value, equal_w_drift) = astuple(
-                port_daily_asset
+                eq_port_daily_asset
             )
 
             # Period results
