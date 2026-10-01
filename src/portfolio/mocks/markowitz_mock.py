@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 
-def find_max_sharpe_mocked_data(
+def find_max_sharpe_mocked(
     er: np.ndarray, cov: np.ndarray, rf: float = 0.04
 ) -> np.ndarray:
     n = len(er)

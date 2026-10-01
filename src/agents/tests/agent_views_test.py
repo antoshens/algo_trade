@@ -8,7 +8,7 @@ import pandas as pd
 
 from data.constants import RISK_UNACCEPTANCE_VALUE
 from src.agents import FinancialViewsAgent, MarketViewsReport, translate_views
-from src.portfolio import black_litterman, find_max_sharpe_mocked_data
+from src.portfolio import black_litterman, find_max_sharpe_mocked
 
 
 @dataclass
@@ -111,12 +111,12 @@ class AgentUnitTest:
         )  # mocked
 
         (mu_pri, _) = black_litterman(pi_equilibrium, cov_matrix, 0.04, None, None)
-        w_prior = find_max_sharpe_mocked_data(mu_pri, cov_matrix, risk_free_rate)
+        w_prior = find_max_sharpe_mocked(mu_pri, cov_matrix, risk_free_rate)
 
         (mu_post, cov_post) = black_litterman(
             pi_equilibrium, cov_matrix, 0.04, translated.Q, translated.P
         )
-        w_post = find_max_sharpe_mocked_data(mu_post, cov_post, risk_free_rate)
+        w_post = find_max_sharpe_mocked(mu_post, cov_post, risk_free_rate)
 
         print("\n[4/4] FINAL COMPARISON OF PORTFOLIO WEIGHTS:")
         df_comparison = pd.DataFrame(
