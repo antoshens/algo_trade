@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from .constants import RISK_UNACCEPTANCE_VALUE, TRADING_DAYS_PER_YEAR
+from src.config import Settings
 
 PandasData = TypeVar("PandasData", pd.DataFrame, pd.Series)
 
@@ -288,7 +288,9 @@ def parkinson_rolling_vol_daily(stocks: pd.DataFrame, window: int) -> pd.Series:
 
 
 def get_portfolio_exp_vol(
-    log_return: pd.DataFrame, weights: np.ndarray | None
+    log_return: pd.DataFrame,
+    weights: np.ndarray | None,
+    settings: Settings | None = None,
 ) -> float:
     """Calculate the expected annualized portfolio volatility.
 
@@ -302,19 +304,26 @@ def get_portfolio_exp_vol(
         Asset logarithmic returns.
     weights : np.ndarray | None
         Current portfolio weight allocation array, or None.
+    settings : Settings | None, optional
+        Application settings instance. If None, loaded from TOML.
 
     Returns
     -------
     float
         Expected annualized portfolio volatility.
     """
+    if settings is None:
+        settings = Settings.from_toml()
+
     if weights is not None:
         current_port_returns = log_return.values @ weights
         expected_annyal_vol = np.std(current_port_returns) * np.sqrt(
-            TRADING_DAYS_PER_YEAR
+            settings.portfolio.trading_days_per_year
         )
     else:
-        expected_annyal_vol = np.sqrt(np.mean(log_return.cov() * TRADING_DAYS_PER_YEAR))
+        expected_annyal_vol = np.sqrt(
+            np.mean(log_return.cov() * settings.portfolio.trading_days_per_year)
+        )
 
     return expected_annyal_vol
 
@@ -397,6 +406,7 @@ def calcualte_structural_cost_coupling_value(
     broker_commission: float,
     rebalances_per_year: int,
     weights: np.ndarray | None,
+    settings: Settings | None = None,
 ) -> float:
     """Calculate the structural turnover penalty multiplier based on transaction friction and portfolio volatility.
 
@@ -419,12 +429,17 @@ def calcualte_structural_cost_coupling_value(
         Number of rebalancing periods per year.
     weights : np.ndarray | None
         Current portfolio weights vector, or None.
+    settings : Settings | None, optional
+        Application settings instance. If None, loaded from TOML.
 
     Returns
     -------
     float
         Turnover penalty coefficient (l1_coeff).
     """
+    if settings is None:
+        settings = Settings.from_toml()
+
     half_spread = corwin_shultz_half_spread(data)
     slippage = get_slippage(data, turnover, portfolio_value)
 
@@ -434,15 +449,19 @@ def calcualte_structural_cost_coupling_value(
     if weights is not None:
         current_port_returns = log_return.values @ weights
         expected_annyal_vol = np.std(current_port_returns) * np.sqrt(
-            TRADING_DAYS_PER_YEAR
+            settings.portfolio.trading_days_per_year
         )
     else:
-        expected_annyal_vol = np.sqrt(np.mean(log_return.cov() * TRADING_DAYS_PER_YEAR))
+        expected_annyal_vol = np.sqrt(
+            np.mean(log_return.cov() * settings.portfolio.trading_days_per_year)
+        )
 
     expected_annyal_vol = np.clip(expected_annyal_vol, 0.10, 0.50)
 
     penalty = (
-        c_trade * (rebalances_per_year / expected_annyal_vol) * RISK_UNACCEPTANCE_VALUE
+        c_trade
+        * (rebalances_per_year / expected_annyal_vol)
+        * settings.portfolio.risk_unacceptance_value
     )
 
     return penalty

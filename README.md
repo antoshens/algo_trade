@@ -67,9 +67,11 @@ AlgoTrade provides modular tools for quantitative asset allocation, risk modelin
 AlgoTrade/
 ├── data/                    # 📥 Market data retrieval and preprocessing
 │   ├── download_data.py     # Yahoo Finance historical ingestion
-│   ├── processors.py        # Returns, spreads, volatility, and feature engineering
-│   └── constants.py         # Trading constants and default parameters
+│   └── processors.py        # Returns, spreads, volatility, and feature engineering
 ├── src/
+│   ├── config/              # ⚙️ Configuration management & application settings
+│   │   ├── settings.py      # Settings dataclasses and loader
+│   │   └── general_settings.toml # General portfolio and agent parameters
 │   ├── portfolio/           # 🧠 Optimization and econometric models
 │   │   ├── markowitz.py     # Mean-variance optimization & efficient frontier
 │   │   ├── black_litterman.py # Black-Litterman allocation model

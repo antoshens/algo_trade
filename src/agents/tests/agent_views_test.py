@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 
 from data import HistoricalNewsProvider
-from data.constants import RISK_UNACCEPTANCE_VALUE
 from src.agents import FinancialViewsAgent, MarketViewsReport, translate_views
+from src.config import Settings
 from src.portfolio import black_litterman, find_max_sharpe_mocked
 
 
@@ -20,19 +20,29 @@ class AgentTestResult:
 
 
 class AgentUnitTest:
-    def __init__(
-        self,
-    ):
+    def __init__(self, settings: Settings | None = None):
+        """Initialize unit tests with configuration settings and mock asset paths.
+
+        Parameters
+        ----------
+        settings : Settings | None, optional
+            Application settings containing LLM agent configurations.
+            If None, loaded from TOML via Settings.from_toml().
+        """
         project_root = Path(__file__).parent.parent
         mocks_path = project_root / "mocks"
+
+        self.settings = Settings.from_toml() if settings is None else settings
 
         self.mock_tickers_path = mocks_path / "mock_tickers.json"
         self.mock_news_path = mocks_path / "mock_news.json"
 
+        self.model = self.settings.agent.llm_name
+        self.base_url = self.settings.agent.agent_url
+        self.gemini_api_key = self.settings.gemini_api_key
+
     def run_agent_views_test(
         self,
-        model: str,
-        base_url: str,
         scenario: str | None = None,
         mocked_news: bool = True,
         tickers: list[str] | None = None,
@@ -58,8 +68,6 @@ class AgentUnitTest:
                 )
 
         report = self._download_and_analyse_views(
-            model,
-            base_url,
             scenario,
             tickers,  # type: ignore
             mocked_news,
@@ -77,8 +85,6 @@ class AgentUnitTest:
 
     def _download_and_analyse_views(
         self,
-        model: str,
-        base_url: str,
         scenario_name: str | None,
         tickers: list[str],
         mocked_news: bool,
@@ -103,7 +109,7 @@ class AgentUnitTest:
                     "Some 'start_date', 'end_date' and 'as_of_date' are required for the live news (mocked_news=False)."
                 )
 
-            news_provider = HistoricalNewsProvider()
+            news_provider = HistoricalNewsProvider(settings=self.settings)
             news_provider.fetch_historical_news_fmp(tickers, start_date, end_date)
             news_ns = news_provider.get_news_for_rebalance(as_of_date, tickers)
 
@@ -113,7 +119,9 @@ class AgentUnitTest:
         )
         print("=" * 70)
 
-        agent = FinancialViewsAgent(model=model, base_url=base_url)
+        agent = FinancialViewsAgent(
+            model=self.model, api_key=self.gemini_api_key, base_url=self.base_url
+        )
         print("\n[1/4] Agent is analysing news and preparing hypothesis...")
 
         assets_index = pd.Index(tickers)
@@ -158,9 +166,11 @@ class AgentUnitTest:
             "\n[3/4] Calculation of CAPM (Prior) equilibrium and posteriori distribution (Black-Litterman)..."
         )
         risk_free_rate = 0.04
+        settings = Settings.from_toml()
+        risk_unacceptance_value = settings.portfolio.risk_unacceptance_value
 
         pi_equilibrium = (
-            RISK_UNACCEPTANCE_VALUE * (cov_matrix @ w_market) + risk_free_rate
+            risk_unacceptance_value * (cov_matrix @ w_market) + risk_free_rate
         )  # mocked
 
         (mu_pri, _) = black_litterman(pi_equilibrium, cov_matrix, 0.04, None, None)

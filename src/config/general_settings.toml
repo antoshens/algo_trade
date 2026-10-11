@@ -1,0 +1,9 @@
+[portfolio]
+initial_capital=10000
+risk_unacceptance_value=2.5
+trading_days_per_year=252
+
+[agent]
+llm_name="qwen3.8:27b-q4_K_M"
+agent_url="http://localhost:11434/v1"
+

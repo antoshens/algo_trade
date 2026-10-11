@@ -5,16 +5,30 @@ from datetime import timedelta
 import duckdb
 import finnhub
 import pandas as pd
-from dotenv import load_dotenv
+
+from src.config import Settings
 
 
 class HistoricalNewsProvider:
     def __init__(
-        self, api_key: str | None = None, cache_file: str = "./cache/news_cache.parquet"
+        self,
+        cache_file: str = "./cache/news_cache.parquet",
+        settings: Settings | None = None,
     ):
-        load_dotenv()
+        """Initialize the historical news provider with caching and API settings.
 
-        self.api_key = api_key or os.getenv("FINNHUB_API_KEY")
+        Parameters
+        ----------
+        cache_file : str, default="./cache/news_cache.parquet"
+            File path for persistent Parquet news cache.
+        settings : Settings | None, optional
+            Application settings containing the Finnhub API key.
+            If None, loaded from TOML via Settings.from_toml().
+        """
+        if settings is None:
+            settings = Settings.from_toml()
+
+        self.finnhub_api_key = settings.finnhub_api_key
         self.cache_file = cache_file
         self.news_df = self._load_cache()
 
@@ -35,12 +49,12 @@ class HistoricalNewsProvider:
         start_date: str,
         end_date: str,
     ):
-        if not self.api_key:
+        if not self.finnhub_api_key:
             raise ValueError("FINNHUB_API_KEY is not configured.")
 
         new_records = []
         for ticker in tickers:
-            finnhub_client = finnhub.Client(api_key=self.api_key)
+            finnhub_client = finnhub.Client(api_key=self.finnhub_api_key)
 
             try:
                 response = finnhub_client.company_news(

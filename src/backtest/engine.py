@@ -14,8 +14,6 @@ import numpy as np
 import pandas as pd
 
 from data import (
-    RISK_UNACCEPTANCE_VALUE,
-    TRADING_DAYS_PER_YEAR,
     HistoricalNewsProvider,
     calcualte_structural_cost_coupling_value,
     get_market_weights,
@@ -23,6 +21,7 @@ from data import (
     log_returns,
 )
 from src.agents import FinancialViewsAgent, translate_views
+from src.config.settings import Settings
 from src.portfolio import (
     ReturnsModel,
     SharpeRatio,
@@ -93,10 +92,26 @@ class DailyAsset:
 
 
 class BacktestEngine:
-    def __init__(self, llm_model: str | None, agent_base_url: str | None):
-        self.llm = llm_model
-        self.agent_base_url = agent_base_url
-        self.news_provider = HistoricalNewsProvider()
+    def __init__(self, settings: Settings | None = None):
+        """Initialize the backtesting engine with configuration settings.
+
+        Parameters
+        ----------
+        settings : Settings | None, optional
+            Application settings containing portfolio and agent configuration.
+            If None, loaded from TOML via Settings.from_toml().
+        """
+        if settings is None:
+            settings = Settings.from_toml()
+
+        self.settings = settings
+        self.news_provider = HistoricalNewsProvider(settings=settings)
+
+        self.llm = settings.agent.llm_name
+        self.agent_base_url = settings.agent.agent_url
+        self.trading_days_per_day = settings.portfolio.trading_days_per_year
+        self.trading_days_per_year = self.trading_days_per_day
+        self.risk_unacceptance_value = settings.portfolio.risk_unacceptance_value
 
     def _calculate_turnover(
         self,
@@ -207,7 +222,7 @@ class BacktestEngine:
 
         P = Q = None
         if report is not None:
-            cov_matrix = np.array(log_ret_df.cov() * TRADING_DAYS_PER_YEAR)
+            cov_matrix = np.array(log_ret_df.cov() * self.trading_days_per_day)
 
             translated = translate_views(report, assets_index, cov_matrix)
             P = translated.P if translated is not None else None
@@ -282,7 +297,7 @@ class BacktestEngine:
         """
         backtest_res = []
         metric: SharpeRatio | SortinoRatio | None = None
-        rebalances_per_year = int(TRADING_DAYS_PER_YEAR / rebalancing_period)
+        rebalances_per_year = int(self.trading_days_per_day / rebalancing_period)
 
         # Trader's portfolio
         weights_drift = None
@@ -333,7 +348,7 @@ class BacktestEngine:
                     expected_annyal_vol = get_portfolio_exp_vol(
                         log_ret_slice, weights_drift
                     )
-                    penalty = (RISK_UNACCEPTANCE_VALUE * 0.2) / expected_annyal_vol
+                    penalty = (self.risk_unacceptance_value * 0.2) / expected_annyal_vol
                 case _:
                     raise ValueError(
                         f"Unrecognized l1_penalty_type param value: {l1_penalty_type}."

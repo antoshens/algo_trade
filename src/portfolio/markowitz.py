@@ -21,8 +21,8 @@ import pandas as pd
 from scipy.optimize import minimize
 from sklearn.covariance import LedoitWolf
 
-from data.constants import RISK_UNACCEPTANCE_VALUE, TRADING_DAYS_PER_YEAR
 from data.processors import get_market_weights, log_returns
+from src.config import Settings
 
 from .black_litterman import black_litterman
 from .garch import garch
@@ -189,6 +189,7 @@ def optimize_portfolio(
     prediction_period: int = 1,
     l1_coeff: float = 0.0,
     w_market: np.ndarray | None = None,
+    settings: Settings | None = None,
 ) -> pd.DataFrame:
     """
     Calculates the efficient frontier by minimizing volatility across a spectrum of target returns.
@@ -226,6 +227,8 @@ def optimize_portfolio(
         Market capitalization weights vector across assets used to compute CAPM implied
         equilibrium expected returns. If None, derived from `tickers_df` using `get_market_weights`
         at the latest date, by default None.
+    settings : Settings | None, optional
+        Application settings instance. If None, loaded from TOML.
 
     Returns
     -------
@@ -264,30 +267,36 @@ def optimize_portfolio(
         case _:
             raise ValueError(f"Unrecognized opt_value param value: {opt_type}.")
 
+    if settings is None:
+        settings = Settings.from_toml()
+
+    trading_days_per_year = settings.portfolio.trading_days_per_year
+    risk_unacceptance_value = settings.portfolio.risk_unacceptance_value
+
     risk_free_rate = get_risk_free_rate(rf_base, rf_start_date, rf_end_date, opt_type)
 
     # Choose covariance estimation model
     match cov_model:
         case "CLASSIC":
             cov_matrix = np.array(
-                log_ret_df.cov() * TRADING_DAYS_PER_YEAR
+                log_ret_df.cov() * trading_days_per_year
             )  # assets covariance matrix # type: ignore
             expected_returns = (
-                RISK_UNACCEPTANCE_VALUE * (cov_matrix @ w_market) + risk_free_rate
+                risk_unacceptance_value * (cov_matrix @ w_market) + risk_free_rate
             )
         case "LEDOIT_WOLF":
             lw = LedoitWolf()
             lw.fit(log_ret)
-            cov_matrix = np.array(lw.covariance_ * TRADING_DAYS_PER_YEAR)
+            cov_matrix = np.array(lw.covariance_ * trading_days_per_year)
             expected_returns = (
-                RISK_UNACCEPTANCE_VALUE * (cov_matrix @ w_market) + risk_free_rate
+                risk_unacceptance_value * (cov_matrix @ w_market) + risk_free_rate
             )
         case "GARCH" | "EGARCH":
             lw = LedoitWolf()
             lw.fit(log_ret)
-            cov_matrix = np.array(lw.covariance_ * TRADING_DAYS_PER_YEAR)
+            cov_matrix = np.array(lw.covariance_ * trading_days_per_year)
             (garch_ret, garch_vol) = garch(
-                log_ret, prediction_period, arch_type=cov_model
+                log_ret, prediction_period, arch_type=cov_model, settings=settings
             )
             expected_returns = garch_ret
             garch_vol_diag = np.diag(garch_vol)
@@ -321,6 +330,7 @@ def optimize_portfolio(
         expected_returns,
         log_ret,
         risk_free_rate,
+        settings,
     )
 
     return pd.DataFrame(optimum_results)
@@ -332,6 +342,7 @@ def _run_portfolio_optimization(
     expected_returns: np.ndarray,
     log_returns: np.ndarray,
     risk_free_rate: float,
+    settings: Settings | None = None,
 ) -> list[dict[str, Any]]:
     """
     Internal helper that performs the SLSQP portfolio optimization loop across target returns.
@@ -348,6 +359,8 @@ def _run_portfolio_optimization(
         Daily log returns matrix of the assets.
     risk_free_rate : float
         Annualized risk-free rate.
+    settings : Settings | None, optional
+        Application settings instance. If None, loaded from TOML.
 
     Returns
     -------
@@ -355,6 +368,11 @@ def _run_portfolio_optimization(
         List of optimization result dictionaries containing 'weights', 'return', 'vol',
         'sharpe', and 'sortino' for each convergence point.
     """
+    if settings is None:
+        settings = Settings.from_toml()
+
+    trading_days_per_year = settings.portfolio.trading_days_per_year
+
     num_assets = len(cov_matrix)
     init_weights = np.ones(num_assets) / num_assets
     constraints = [
@@ -412,12 +430,12 @@ def _run_portfolio_optimization(
             vol = np.sqrt(last_optimal_weights.T @ cov_matrix @ last_optimal_weights)
             sharpe = (ret - risk_free_rate) / vol
 
-            daily_rf = risk_free_rate / TRADING_DAYS_PER_YEAR
+            daily_rf = risk_free_rate / trading_days_per_year
             square_negative_deviations = (
                 np.minimum(0, last_optimal_weights @ log_returns.T - daily_rf) ** 2
             )
             downside_vol = np.sqrt(np.mean(square_negative_deviations)) * np.sqrt(
-                TRADING_DAYS_PER_YEAR
+                trading_days_per_year
             )
             sortino = (ret - risk_free_rate) / downside_vol
 
@@ -480,6 +498,7 @@ def find_max_sharpe(
     init_weights: np.ndarray | None = None,
     l1_coeff: float = 0.0,
     w_market: np.ndarray | None = None,
+    settings: Settings | None = None,
 ) -> tuple[SharpeRatio, pd.DataFrame]:
     """
     Optimizes portfolio weights to maximize the Sharpe ratio (find the tangency portfolio).
@@ -521,6 +540,8 @@ def find_max_sharpe(
         Market capitalization weights vector across assets used to compute CAPM implied
         equilibrium expected returns. If None, derived from `tickers_df` using `get_market_weights`
         at the latest date, by default None.
+    settings : Settings | None, optional
+        Application settings instance. If None, loaded from TOML.
 
     Returns
     -------
@@ -572,33 +593,39 @@ def find_max_sharpe(
         case _:
             raise ValueError(f"Unrecognized opt_value param value: {opt_type}.")
 
+    if settings is None:
+        settings = Settings.from_toml()
+
+    trading_days_per_year = settings.portfolio.trading_days_per_year
+    risk_unacceptance_value = settings.portfolio.risk_unacceptance_value
+
     risk_free_rate = get_risk_free_rate(rf_base, rf_start_date, rf_end_date, opt_type)
 
     # Choose covariance estimation model
     match cov_model:
         case "CLASSIC":
             cov_matrix = np.array(
-                log_ret_df.cov() * TRADING_DAYS_PER_YEAR
+                log_ret_df.cov() * trading_days_per_year
             )  # assets covariance matrix # type: ignore
             expected_returns = (
-                RISK_UNACCEPTANCE_VALUE * (cov_matrix @ w_market) + risk_free_rate
+                risk_unacceptance_value * (cov_matrix @ w_market) + risk_free_rate
             )
         case "LEDOIT_WOLF":
             lw = LedoitWolf()
             lw.fit(log_ret)
-            cov_matrix = np.array(lw.covariance_ * TRADING_DAYS_PER_YEAR)
+            cov_matrix = np.array(lw.covariance_ * trading_days_per_year)
             expected_returns = (
-                RISK_UNACCEPTANCE_VALUE * (cov_matrix @ w_market) + risk_free_rate
+                risk_unacceptance_value * (cov_matrix @ w_market) + risk_free_rate
             )
         case "GARCH" | "EGARCH":
             lw = LedoitWolf()
             lw.fit(log_ret)
-            cov_matrix = np.array(lw.covariance_ * TRADING_DAYS_PER_YEAR)
+            cov_matrix = np.array(lw.covariance_ * trading_days_per_year)
             sample_vols = np.sqrt(np.diag(cov_matrix))
             corr_matrix = cov_matrix / np.outer(sample_vols, sample_vols)
 
             (garch_ret, garch_vol) = garch(
-                log_ret, prediction_period, arch_type=cov_model
+                log_ret, prediction_period, arch_type=cov_model, settings=settings
             )
 
             expected_returns = garch_ret
@@ -770,6 +797,7 @@ def find_max_sortino(
     init_weights: np.ndarray | None = None,
     l1_coeff: float = 0.0,
     w_market: np.ndarray | None = None,
+    settings: Settings | None = None,
 ) -> tuple[SortinoRatio, pd.DataFrame]:
     """
     Optimizes portfolio weights to maximize the Sortino ratio (minimizing downside volatility).
@@ -812,6 +840,8 @@ def find_max_sortino(
         Market capitalization weights vector across assets used to compute CAPM implied
         equilibrium expected returns. If None, derived from `tickers_df` using `get_market_weights`
         at the latest date, by default None.
+    settings : Settings | None, optional
+        Application settings instance. If None, loaded from TOML.
 
     Returns
     -------
@@ -863,30 +893,36 @@ def find_max_sortino(
         case _:
             raise ValueError(f"Unrecognized opt_value param value: {opt_type}.")
 
+    if settings is None:
+        settings = Settings.from_toml()
+
+    trading_days_per_year = settings.portfolio.trading_days_per_year
+    risk_unacceptance_value = settings.portfolio.risk_unacceptance_value
+
     risk_free_rate = get_risk_free_rate(rf_base, rf_start_date, rf_end_date, opt_type)
 
     # Choose covariance estimation model
     match cov_model:
         case "CLASSIC":
             cov_matrix = np.array(
-                log_ret_df.cov() * TRADING_DAYS_PER_YEAR
+                log_ret_df.cov() * trading_days_per_year
             )  # assets covariance matrix # type: ignore
             expected_returns = (
-                RISK_UNACCEPTANCE_VALUE * (cov_matrix @ w_market) + risk_free_rate
+                risk_unacceptance_value * (cov_matrix @ w_market) + risk_free_rate
             )
         case "LEDOIT_WOLF":
             lw = LedoitWolf()
             lw.fit(log_ret)
-            cov_matrix = np.array(lw.covariance_ * TRADING_DAYS_PER_YEAR)
+            cov_matrix = np.array(lw.covariance_ * trading_days_per_year)
             expected_returns = (
-                RISK_UNACCEPTANCE_VALUE * (cov_matrix @ w_market) + risk_free_rate
+                risk_unacceptance_value * (cov_matrix @ w_market) + risk_free_rate
             )
         case "GARCH" | "EGARCH":
             lw = LedoitWolf()
             lw.fit(log_ret)
-            cov_matrix = np.array(lw.covariance_ * TRADING_DAYS_PER_YEAR)
+            cov_matrix = np.array(lw.covariance_ * trading_days_per_year)
             (garch_ret, garch_vol) = garch(
-                log_ret, prediction_period, arch_type=cov_model
+                log_ret, prediction_period, arch_type=cov_model, settings=settings
             )
             expected_returns = garch_ret
             garch_vol_diag = np.diag(garch_vol)
@@ -920,6 +956,7 @@ def find_max_sortino(
         log_ret,
         expected_returns,
         risk_free_rate,
+        settings,
     )
 
 
@@ -930,6 +967,7 @@ def _maximize_sortino_ratio(
     log_returns: np.ndarray,
     expected_returns: np.ndarray,
     risk_free_rate: float,
+    settings: Settings | None = None,
 ) -> tuple[SortinoRatio, pd.DataFrame]:
     """
     Internal helper that performs the SLSQP Sortino ratio optimization.
@@ -948,6 +986,8 @@ def _maximize_sortino_ratio(
         Expected annualized returns of the assets.
     risk_free_rate : float
         Annualized risk-free rate.
+    settings : Settings | None, optional
+        Application settings instance. If None, loaded from TOML.
 
     Returns
     -------
@@ -959,6 +999,11 @@ def _maximize_sortino_ratio(
     UserWarning
         If the SLSQP optimizer fails to converge, falls back to `init_weights`.
     """
+    if settings is None:
+        settings = Settings.from_toml()
+
+    trading_days_per_year = settings.portfolio.trading_days_per_year
+
     num_assets = tickers_df.columns.get_level_values(0).nunique()
     constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
     bounds = tuple((0.05, 0.25) for _ in range(num_assets))
@@ -971,6 +1016,7 @@ def _maximize_sortino_ratio(
             log_returns,
             expected_returns,
             risk_free_rate,
+            trading_days_per_year,
         ),
         x0=init_weights,
         method="SLSQP",
@@ -978,7 +1024,7 @@ def _maximize_sortino_ratio(
         constraints=constraints,
     )
 
-    daily_rf = risk_free_rate / TRADING_DAYS_PER_YEAR
+    daily_rf = risk_free_rate / trading_days_per_year
     square_negative_deviations = np.minimum(0, log_returns - daily_rf) ** 2
 
     if res_max_sortino.success:
@@ -989,13 +1035,13 @@ def _maximize_sortino_ratio(
         warnings.warn("The optimizator finished work with an error or was aborted.")
 
     exact_max_ret = np.dot(optimal_weights, expected_returns)
-    daily_rf = risk_free_rate / TRADING_DAYS_PER_YEAR
+    daily_rf = risk_free_rate / trading_days_per_year
     square_negative_deviations = (
         np.minimum(0, optimal_weights @ log_returns.T - daily_rf) ** 2
     )
     exact_max_negative_vol = np.sqrt(
         (square_negative_deviations).mean(axis=0)
-    ) * np.sqrt(TRADING_DAYS_PER_YEAR)
+    ) * np.sqrt(trading_days_per_year)
 
     exact_max_sortino = (exact_max_ret - risk_free_rate) / exact_max_negative_vol
 
@@ -1020,6 +1066,7 @@ def _max_sortino_objective(
     log_returns: np.ndarray,
     expected_returns: np.ndarray,
     risk_free_rate: float,
+    trading_days_per_year: int | None = None,
 ) -> float:
     """
     Objective function to find the maximum Sortino ratio (returns negative Sortino ratio for minimization).
@@ -1038,21 +1085,26 @@ def _max_sortino_objective(
         Array of expected annualized returns for the assets.
     risk_free_rate : float
         Annualized risk-free rate.
+    trading_days_per_year : int | None, optional
+        Number of trading days per year. If None, loaded from Settings TOML.
 
     Returns
     -------
     float
         Penalized negative Sortino ratio: -((Return - RiskFreeRate) / DownsideVolatility - penalty).
     """
+    if trading_days_per_year is None:
+        trading_days_per_year = Settings.from_toml().portfolio.trading_days_per_year
+
     ret = np.dot(weights, expected_returns)
 
     turnover = np.sum(np.abs(weights - current_weights))
     penalty = l1_coeff * turnover
 
-    daily_rf = risk_free_rate / TRADING_DAYS_PER_YEAR
+    daily_rf = risk_free_rate / trading_days_per_year
     square_negative_deviations = np.minimum(0, weights @ log_returns.T - daily_rf) ** 2
     downside_vol = np.sqrt((square_negative_deviations).mean(axis=0)) * np.sqrt(
-        TRADING_DAYS_PER_YEAR
+        trading_days_per_year
     )
 
     # negative Sortino ratio so minimize() finds the maximum

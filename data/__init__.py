@@ -1,6 +1,5 @@
 """Market data acquisition, financial time-series preprocessing, and feature engineering."""
 
-from .constants import RISK_UNACCEPTANCE_VALUE, TRADING_DAYS_PER_YEAR
 from .download_data import download_tickers_history
 from .news_provider import HistoricalNewsProvider
 from .processors import (
@@ -21,8 +20,6 @@ from .processors import (
 )
 
 __all__ = [
-    "RISK_UNACCEPTANCE_VALUE",
-    "TRADING_DAYS_PER_YEAR",
     "HistoricalNewsProvider",
     "PandasData",
     "calcualte_structural_cost_coupling_value",

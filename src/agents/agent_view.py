@@ -7,11 +7,9 @@ for assets in an investment universe, supporting both Google Gemini SDK and Open
 """
 
 import json
-import os
 from collections.abc import Sequence
 
 import pandas as pd
-from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from openai import OpenAI
@@ -59,20 +57,22 @@ class FinancialViewsAgent:
         model : str
             The LLM model identifier (e.g., 'gemini-2.5-flash', 'llama3:8b').
         api_key : str | None, optional
-            API key for the chosen provider. If None and using Google Gemini,
-            falls back to the `GEMINI_API_KEY` environment variable. If using an
+            API key for the chosen provider. If using an
             OpenAI-compatible server (with `base_url`) and None is provided, defaults to 'ollama'.
         base_url : str | None, optional
             Base URL for OpenAI-compatible endpoints (e.g., 'http://localhost:11434/v1' for Ollama/vLLM).
-            When None, Google GenAI SDK is used.
+            When None and api_key is provided, Google GenAI SDK is used.
         temperature : float, optional
             Sampling temperature for inference, by default 0.1.
         """
-        load_dotenv()
+        if api_key is None and base_url is None:
+            raise ValueError(
+                "At least one param ('api_key' or 'base_url) should be passed."
+            )
 
-        self.isGoogleSdk = base_url is None
+        self.isGoogleSdk = api_key is not None and base_url is None
         if self.isGoogleSdk:
-            self.client = genai.Client(api_key=api_key or os.getenv("GEMINI_API_KEY"))
+            self.client = genai.Client(api_key=api_key)
         else:
             api_key = "ollama" if base_url is not None else api_key
             self.client = OpenAI(api_key=api_key, base_url=base_url)
