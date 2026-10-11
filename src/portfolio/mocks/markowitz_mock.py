@@ -15,9 +15,11 @@ def find_max_sharpe_mocked(
         port_vol = np.sqrt(np.dot(w.T, np.dot(cov, w)))
         if port_vol < 1e-8:
             return 0.0
+
         return -(port_ret - rf) / port_vol
 
     res = minimize(
         neg_sharpe, init_weights, method="SLSQP", bounds=bounds, constraints=constraints
     )
+
     return res.x if res.success else init_weights

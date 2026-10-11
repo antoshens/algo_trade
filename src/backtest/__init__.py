@@ -1,11 +1,11 @@
 """Portfolio backtesting engine, performance metrics, and evaluation tools."""
 
 from .engine import (
+    BacktestEngine,
     DailyAsset,
     L1PenaltyType,
     OptimizationMetric,
     Turnover,
-    perform_backtesting,
 )
 from .metrics import (
     calculate_cagr,
@@ -18,6 +18,7 @@ from .metrics import (
 )
 
 __all__ = [
+    "BacktestEngine",
     "DailyAsset",
     "L1PenaltyType",
     "OptimizationMetric",
@@ -29,5 +30,4 @@ __all__ = [
     "calculate_rolling_sortino",
     "calculate_sharpe",
     "calculate_sortino",
-    "perform_backtesting",
 ]

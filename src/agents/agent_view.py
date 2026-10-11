@@ -108,6 +108,14 @@ class FinancialViewsAgent:
             Structured report containing market sentiment summary and individual asset views,
             or an empty fallback report if generation fails.
         """
+        if isinstance(news_payload, dict):
+            none_keys = [key for key, value in news_payload.items() if len(value) == 0]
+            if len(none_keys) == len(news_payload):
+                print(
+                    "[Agent Warning] The 'news_payload' does not contain any news for any of the passed tickers."
+                )
+                return
+
         assets_list = list(asset_universe)
         formatted_sys_prompt = FINANCIAL_ANALYST_AGENT_SYSTEM_PROMPT.format(
             assets_list=", ".join(assets_list)
@@ -151,13 +159,19 @@ class FinancialViewsAgent:
                     temperature=self.temperature,
                 )
 
-                return response.choices[0].message.parsed
+                report = response.choices[0].message.parsed
+                if report is None:
+                    print("[Agent Warning] No views generated.")
+                else:
+                    print(f"[Agent Success] Generated {len(report.views)} views.")
+
+                return report
 
         except Exception as e:
             # Fallback in case of erros during parsing
             print(f"[Agent Warning] Failed to generate views as of {as_of_date}: {e}")
             return MarketViewsReport(
                 as_of_date=as_of_date,
-                market_sentiment_summary="Agent fallback: empty views generated due to an error.",
+                market_sentiment_summary="[Agent fallback]: empty views generated due to an error.",
                 views=[],
             )

@@ -249,6 +249,7 @@ huggingface_cache/
 *.pth
 *.gguf
 *.safetensors
+*.parquet
 
 # IDE
 .idea/

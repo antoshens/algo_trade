@@ -242,11 +242,8 @@ def optimize_portfolio(
     tickers_df = tickers_df.dropna()
     log_ret_df = log_returns(tickers_df)
     log_ret = np.array(log_ret_df)
-    w_market = (
-        get_market_weights(tickers_df).loc[tickers_df.index[-1]].values
-        if w_market is None
-        else w_market
-    )
+    if w_market is None:
+        w_market = get_market_weights(tickers_df).loc[tickers_df.index[-1]].values
 
     # Defining optimization type
     match opt_type:
@@ -547,11 +544,8 @@ def find_max_sharpe(
     num_assets = tickers_df.columns.get_level_values(0).nunique()
     log_ret_df = log_returns(tickers_df)
     log_ret = np.array(log_ret_df)
-    w_market = (
-        get_market_weights(tickers_df).loc[tickers_df.index[-1]].values
-        if w_market is None
-        else w_market
-    )
+    if w_market is None:
+        w_market = get_market_weights(tickers_df).loc[tickers_df.index[-1]].values
 
     if init_weights is None:
         init_weights = np.ones(num_assets) / num_assets
@@ -841,11 +835,8 @@ def find_max_sortino(
     num_assets = tickers_df.columns.get_level_values(0).nunique()
     log_ret_df = log_returns(tickers_df)
     log_ret = np.array(log_ret_df)
-    w_market = (
-        get_market_weights(tickers_df).loc[tickers_df.index[-1]].values
-        if w_market is None
-        else w_market
-    )
+    if w_market is None:
+        w_market = get_market_weights(tickers_df).loc[tickers_df.index[-1]].values
 
     if init_weights is None:
         init_weights = np.ones(num_assets) / num_assets

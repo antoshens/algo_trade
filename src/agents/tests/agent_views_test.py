@@ -1,4 +1,5 @@
 import json
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
+from data import HistoricalNewsProvider
 from data.constants import RISK_UNACCEPTANCE_VALUE
 from src.agents import FinancialViewsAgent, MarketViewsReport, translate_views
 from src.portfolio import black_litterman, find_max_sharpe_mocked
@@ -28,38 +30,87 @@ class AgentUnitTest:
         self.mock_news_path = mocks_path / "mock_news.json"
 
     def run_agent_views_test(
-        self, model: str, base_url: str, scenario: str
+        self,
+        model: str,
+        base_url: str,
+        scenario: str | None = None,
+        mocked_news: bool = True,
+        tickers: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        as_of_date: str | None = None,
     ) -> AgentTestResult:
-        mock_tickers_ns = json.loads(
-            self.mock_tickers_path.read_text(encoding="utf-8"),
-            object_hook=lambda d: SimpleNamespace(**d),
+        if mocked_news:
+            mock_tickers_ns = json.loads(
+                self.mock_tickers_path.read_text(encoding="utf-8"),
+                object_hook=lambda d: SimpleNamespace(**d),
+            )
+            tickers = mock_tickers_ns.tickers
+        else:
+            if start_date is None or end_date is None or as_of_date is None:
+                raise ValueError(
+                    "Some 'start_date', 'end_date' and 'as_of_date' are required for the live news (mocked_news=False)."
+                )
+
+            if tickers is None:
+                raise ValueError(
+                    "The 'tickers' param is required for the live news (mocked_news=False)."
+                )
+
+        report = self._download_and_analyse_views(
+            model,
+            base_url,
+            scenario,
+            tickers,  # type: ignore
+            mocked_news,
+            start_date,
+            end_date,
+            as_of_date,
         )
-        tickers = mock_tickers_ns.tickers
 
-        report = self.__download_and_analyse_views(model, base_url, scenario, tickers)
-
-        result_df = self.__translate_and_retrieve_calculated_data(
-            tickers,
+        result_df = self._translate_and_retrieve_calculated_data(
+            tickers,  # type: ignore
             report,
         )
 
         return AgentTestResult(report, result_df)
 
-    def __download_and_analyse_views(
+    def _download_and_analyse_views(
         self,
         model: str,
         base_url: str,
-        scenario_name: str,
+        scenario_name: str | None,
         tickers: list[str],
+        mocked_news: bool,
+        start_date: str | None,
+        end_date: str | None,
+        as_of_date: str | None,
     ) -> MarketViewsReport | None:
-        mock_news_ns = json.loads(
-            self.mock_news_path.read_text(encoding="utf-8"),
-            object_hook=lambda d: SimpleNamespace(**d),
-        )
+        if mocked_news:
+            if scenario_name is None:
+                raise ValueError(
+                    "The 'scenario_name' param is required for the live news (mocked_news=True)."
+                )
 
-        as_of_date = mock_news_ns.neutral_noise.as_of_date
+            news_ns = json.loads(
+                self.mock_news_path.read_text(encoding="utf-8"),
+                object_hook=lambda d: SimpleNamespace(**d),
+            )
+            as_of_date = news_ns.neutral_noise.as_of_date
+        else:
+            if start_date is None or end_date is None or as_of_date is None:
+                raise ValueError(
+                    "Some 'start_date', 'end_date' and 'as_of_date' are required for the live news (mocked_news=False)."
+                )
+
+            news_provider = HistoricalNewsProvider()
+            news_provider.fetch_historical_news_fmp(tickers, start_date, end_date)
+            news_ns = news_provider.get_news_for_rebalance(as_of_date, tickers)
+
         print("=" * 70)
-        print(f"|> RUN TEST SCENARIO: {scenario_name.upper()} (As of: {as_of_date})")
+        print(
+            f"|> RUN TEST SCENARIO: {scenario_name.upper() if mocked_news else 'live news'} (As of: {as_of_date})"  # type: ignore
+        )
         print("=" * 70)
 
         agent = FinancialViewsAgent(model=model, base_url=base_url)
@@ -67,14 +118,14 @@ class AgentUnitTest:
 
         assets_index = pd.Index(tickers)
         report = agent.analyze_market_and_generate_views(
-            as_of_date=as_of_date,
+            as_of_date=as_of_date,  # type: ignore
             asset_universe=assets_index,
-            news_payload=mock_news_ns,
+            news_payload=news_ns,
         )
 
         return report
 
-    def __translate_and_retrieve_calculated_data(
+    def _translate_and_retrieve_calculated_data(
         self,
         tickers: list[str],
         report: MarketViewsReport | None,
@@ -86,14 +137,16 @@ class AgentUnitTest:
         N = len(tickers)
 
         # Mock base assets volatility
-        base_vols = np.array([0.22, 0.25, 0.22, 0.42])
+        base_vols = np.array([random.randint(20, 80) / 100 for _ in range(N)])
+        base_vols = base_vols / base_vols.sum()
 
         corr = np.full((N, N), 0.55)
         np.fill_diagonal(corr, 1.0)
         cov_matrix = np.diag(base_vols) @ corr @ np.diag(base_vols)  # mocked cov_matrix
 
         # S&P 500 capitalization (assets market weights)
-        w_market = np.array([0.28, 0.22, 0.30, 0.20])
+        w_market = np.array([random.randint(20, 80) / 100 for _ in range(N)])
+        w_market = w_market / w_market.sum()
 
         print("\n[2/4] Translate hypothesis into matrix P, Q, Omega...")
         translated = translate_views(report, assets_index, cov_matrix)
@@ -121,7 +174,7 @@ class AgentUnitTest:
         print("\n[4/4] FINAL COMPARISON OF PORTFOLIO WEIGHTS:")
         df_comparison = pd.DataFrame(
             {
-                "Market (Cap)": w_market,
+                "Market (Cap)": [f"{w:.2%}" for w in w_market],
                 "Prior Ret (Pi)": [f"{r:.1%}" for r in mu_pri],
                 "Posterior Ret (BL)": [f"{r:.1%}" for r in mu_post],
                 "Weight: Prior": [f"{w:.1%}" for w in w_prior],
