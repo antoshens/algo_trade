@@ -1,4 +1,4 @@
-# 📈 AlgoTrade
+# 📈 algo_trade
 
 <p align="center">
   <strong>Algorithmic Trading & Portfolio Optimization Engine</strong>
@@ -14,13 +14,13 @@
 
 ---
 
-An algorithmic trading, portfolio optimization, and quantitative backtesting engine implemented in Python. AlgoTrade combines Modern Portfolio Theory (MPT), econometric volatility forecasting, LLM-powered market sentiment analysis, and realistic market microstructure execution modeling.
+An algorithmic trading, portfolio optimization, and quantitative backtesting engine implemented in Python. algo_trade combines Modern Portfolio Theory (MPT), econometric volatility forecasting, LLM-powered market sentiment analysis, and realistic market microstructure execution modeling.
 
 ---
 
 ## 🌟 Overview
 
-AlgoTrade provides modular tools for quantitative asset allocation, risk modeling, and strategy backtesting. The platform evaluates portfolios under realistic execution conditions (turnover costs, drift, commissions) and incorporates AI-driven market views into quantitative allocation models like Black-Litterman.
+algo_trade provides modular tools for quantitative asset allocation, risk modeling, and strategy backtesting. The platform evaluates portfolios under realistic execution conditions (turnover costs, drift, commissions) and incorporates AI-driven market views into quantitative allocation models like Black-Litterman.
 
 ---
 
@@ -75,7 +75,7 @@ AlgoTrade provides modular tools for quantitative asset allocation, risk modelin
 ## 🗂️ Project Structure
 
 ```text
-AlgoTrade/
+algo_trade/
 ├── data/                    # 📥 Market data retrieval and preprocessing
 │   ├── download_data.py     # Yahoo Finance historical ingestion
 │   ├── news_provider.py     # Historical news fetching and DuckDB caching
@@ -117,8 +117,8 @@ AlgoTrade/
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/<username>/AlgoTrade.git
-   cd AlgoTrade
+   git clone https://github.com/<username>/algo_trade.git
+   cd algo_trade
    ```
 
 2. **Create and activate a virtual environment:**
