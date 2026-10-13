@@ -32,8 +32,6 @@ class FinancialViewsAgent:
 
     Attributes
     ----------
-    isGoogleSdk : bool
-        Whether Google GenAI SDK is utilized (True when `base_url` is None).
     client : genai.Client | OpenAI
         Underlying API client instance.
     model : str
@@ -47,6 +45,7 @@ class FinancialViewsAgent:
         model: str,
         api_key: str | None = None,
         base_url: str | None = None,  # for vLLM/Ollama
+        googleSdk: bool = False,
         temperature: float = 0.1,
     ):
         """
@@ -62,20 +61,24 @@ class FinancialViewsAgent:
         base_url : str | None, optional
             Base URL for OpenAI-compatible endpoints (e.g., 'http://localhost:11434/v1' for Ollama/vLLM).
             When None and api_key is provided, Google GenAI SDK is used.
+        googleSdk : bool, optional
+            Whether Google GenAI SDK is utilized. False by default.
         temperature : float, optional
             Sampling temperature for inference, by default 0.1.
         """
-        if api_key is None and base_url is None:
+        if base_url is not None:  # vLLM/Ollama
+            api_key = "ollama"
+            self.client = OpenAI(api_key=api_key, base_url=base_url)
+        elif api_key is not None:  # not a local model
+            if googleSdk:  # Google SDK
+                self.client = genai.Client(api_key=api_key)
+            else:  # OpenAI client
+                self.client = OpenAI(api_key=api_key)
+        else:
             raise ValueError(
                 "At least one param ('api_key' or 'base_url) should be passed."
             )
 
-        self.isGoogleSdk = api_key is not None and base_url is None
-        if self.isGoogleSdk:
-            self.client = genai.Client(api_key=api_key)
-        else:
-            api_key = "ollama" if base_url is not None else api_key
-            self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
         self.temperature = temperature
 
